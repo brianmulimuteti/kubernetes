@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: nginx-replicaset
+  labels:
+    env: task
+spec:
+  template:
+    metadata:
+      name: nginx-task
+      labels:
+        env: task
+    spec:
+      containers:
+      - name: nginx-task
+        image: nginx:latest
+  replicas: 4
+  selector:
+    matchLabels:
+      env: task

@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deploy
+  labels:
+    env: demo
+    type: frontend
+    org: EBL
+spec:
+  template:
+    metadata:
+      labels:
+        env: demo
+      name: nginx-pod
+    spec:
+      containers:
+      - name: nginx-container
+        image: nginx:latest
+        ports:
+        - containerPort: 9000
+  replicas: 3
+  selector:
+    matchLabels:
+      env: demo
