@@ -4,6 +4,7 @@ metadata:
   name: externalname-svc
   labels:
     env: demo
+    app: nginx-new
 spec:
   type: ExternalName
-  externalName: www.database.com
+  externalName: www.demo.com
