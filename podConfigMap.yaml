@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-cm
+  labels:
+    env: configmap
+spec:
+  containers:
+  - name: configmappod
+    image: busybox:1.28
+    env:
+      # Define the environment variable
+      - name: FIRSTNAME # Notice that the case is different here. This is the variable name for the container.
+        valueFrom:
+          configMapKeyRef:
+            name: configmap           # The ConfigMap this value comes from.
+            key: firstname # The key to fetch.
+    command: ['sh', '-c', 'echo Tha app is running! && sleep 3600']
