@@ -1,14 +1,3 @@
-# First generate a private Key
-openssl genrsa -out myuser.key 3072
-
-# Create an X.509 certificate signing request. Change CN
-openssl req -new -key myuser.key -out myuser.csr -subj "/CN=myuser"
-
-# convert the CSR to base64 and add it to CSR.yml file
-the pasted CSR is to be in one line Base 64 so it can be added in "request" part - command
-cat file.csr | base64 | tr -d "\n"
-
-# create a CSR.yml file for this CSR, sample format below
 apiVersion: certificates.k8s.io/v1
 kind: CertificateSigningRequest
 metadata:
@@ -19,30 +8,3 @@ spec:
   expirationSeconds: 8640000
   usages:
     - client auth
-
-# apply the csr.yaml
-kubectl apply -f csr.yaml
-kubectl get csr
-kubectl certificate approve <csr-name>
-
-# Share approved csr with user
-kubectl get csr <csr-name> -o yaml > issuedcsr.yaml
-
-echo <certificate> | base64 -d
-
-# Proceed step 2: authenticate as user
-# First: Switch to user
-kubectl config set-credentials <user> --client-key=<value/path to key file> --client-certificate=<value/path to crt file> --embed-certs=true
-
-# Create context for that user (imperateive way), or use Kubeconfig file as a declarative way
-kubectl config set-context <name> --cluster=<cluster name> --user=<user>
-# if you need to now cluster name
-kubectl config get-clusters
-
-# Switch to created context
-kubectl use-context <context name>
-
-# Run simple command to verify
-kubectl get pods
-
-

@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: task-readpods
+  namespace: default
+subjects:
+ - kind: User
+   name: task
+   apiGroup: rbac.authorization.k8s.io
+
+roleRef:
+  kind: Role
+  name: pod-reader-task
+  apiGroup: rbac.authorization.k8s.io
