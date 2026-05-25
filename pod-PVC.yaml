@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-pvc
+  namespace: default
+spec:
+  nodeName: ip-172-31-21-120
+
+  volumes:
+  - name: pv-volume
+    persistentVolumeClaim:
+      claimName: mypvc
+
+  containers:
+  - name: pvc-container
+    image: nginx
+    ports:
+    - containerPort: 80
+      name: http-server
+    volumeMounts:
+    - mountPath: /usr/share/nginx/html
+      name: pv-volume
