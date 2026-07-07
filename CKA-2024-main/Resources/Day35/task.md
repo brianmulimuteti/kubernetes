@@ -17,7 +17,7 @@ In this exercise, you will explore the Kubernetes ETCD backup and restore proces
 9. Delete the deployment
 10. Restore the original state of the cluster from backup file at `/opt/etcd-snapshot.db` to the directory `/var/lib/etcd-from-backup`
 11. Point ETCD to the new directory with the restored backup
-12. Restart etcd pod
+12. Restart etcd pod and restart kubelet as well
 13. Check the deployment using `kubectl get deploy` , make sure that it is available as you have restored the backup prior to deleting the deployment
 
 14. **Share your learnings**: Document your key takeaways and insights in a blog post and social media update
