@@ -1,0 +1,4 @@
+resources:
+- rabbitmq-config.yaml
+- rabbitmq-depl.yaml
+- rabbitmq-service.yaml

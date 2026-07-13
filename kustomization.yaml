@@ -1,0 +1,8 @@
+resources:
+# you define all the resources here as from the same folder heirarchy as where the kustomization.yaml file is 
+# folders example if kustomization yaml is in the root folder and within the root folder you have a folder called "base" and within the base folder you have a pod-registry-image.yaml file then you would define the resources as below
+- base/pod-registry-image.yaml
+- base/another-resource.yaml
+# if you have another folder say "overlays" and within that folder you have a file called "overlay-resource.yaml" then you would define the resources as below
+- overlays/overlay-resource.yaml
+- overlays/another-overlay-resource.yaml

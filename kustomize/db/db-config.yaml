@@ -1,0 +1,7 @@
+apiVersion: v1
+data:
+  password: mypassword
+  username: redis
+kind: ConfigMap
+metadata:
+  name: db-credentials

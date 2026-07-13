@@ -1,0 +1,13 @@
+resources:
+- deployment.yaml
+- service.yaml
+
+# we want to generate a configMap for each environment and we want to use the same configMap name for each environment but with different data values. 
+# so we will use the configMapGenerator to generate a configMap for each environment with the same name but different data values.
+configMapGenerator:
+  - name: nginx-config
+    files:
+      - index.html
+    # behavior: merge
+
+# there is also secretGenerator

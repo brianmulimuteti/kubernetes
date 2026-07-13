@@ -1,0 +1,15 @@
+namePrefix: dev-
+namespace: dev
+resources:
+# provide the path to the base folder
+- ../../base
+
+configMapGenerator:
+  - name: nginx-config
+    behavior: replace
+    files:
+      - index.html
+
+patches:
+  - path: replicas.yaml
+  - path: limits.yaml

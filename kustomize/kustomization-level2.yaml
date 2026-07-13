@@ -1,0 +1,5 @@
+# this is the kustomization file which involes a kustomization.yaml file in each subfolder.
+resources:
+- db/
+- message-broker/
+- nginx/
