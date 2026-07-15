@@ -143,31 +143,36 @@ EOF
 
 install_containerd() {
   if command -v containerd >/dev/null && containerd --version | grep -q "$CONTAINERD_VERSION"; then
-    log "containerd $CONTAINERD_VERSION already installed; skipping."
-    return
+    log "containerd $CONTAINERD_VERSION already installed; skipping download."
+  else
+    log "Installing containerd ${CONTAINERD_VERSION}…"
+    local tmp
+    tmp="$(mktemp -d)"
+    pushd "$tmp" >/dev/null
+    curl -fsSLO "https://github.com/containerd/containerd/releases/download/v${CONTAINERD_VERSION}/containerd-${CONTAINERD_VERSION}-linux-${ARCH}.tar.gz"
+    tar Cxzf /usr/local "containerd-${CONTAINERD_VERSION}-linux-${ARCH}.tar.gz"
+
+    curl -fsSLo /usr/local/lib/systemd/system/containerd.service \
+         --create-dirs \
+         https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
+
+    mkdir -p /etc/containerd
+    containerd config default | tee /etc/containerd/config.toml >/dev/null
+    # Use the systemd cgroup driver (matches kubelet's default).
+    sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+    popd >/dev/null
+    rm -rf "$tmp"
   fi
-  log "Installing containerd ${CONTAINERD_VERSION}…"
-  local tmp
-  tmp="$(mktemp -d)"
-  pushd "$tmp" >/dev/null
-  curl -fsSLO "https://github.com/containerd/containerd/releases/download/v${CONTAINERD_VERSION}/containerd-${CONTAINERD_VERSION}-linux-${ARCH}.tar.gz"
-  tar Cxzf /usr/local "containerd-${CONTAINERD_VERSION}-linux-${ARCH}.tar.gz"
 
-  curl -fsSLo /usr/local/lib/systemd/system/containerd.service \
-       --create-dirs \
-       https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
-
-  mkdir -p /etc/containerd
-  containerd config default | tee /etc/containerd/config.toml >/dev/null
-  # Use the systemd cgroup driver (matches kubelet's default).
-  sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
-
+  # ALWAYS ensure containerd is enabled (starts on boot) and running — even on
+  # a re-run where the binary was already present. This is critical: if the
+  # service is left `disabled`, a reboot brings the node up WITHOUT a container
+  # runtime, and the kubelet crash-loops forever ("failed to run Kubelet:
+  # validate service connection"). Enabling is idempotent and cheap.
   systemctl daemon-reload
   systemctl enable --now containerd
-  popd >/dev/null
-  rm -rf "$tmp"
   systemctl is-active --quiet containerd || die "containerd failed to start"
-  log "containerd up."
+  log "containerd up and enabled on boot."
 }
 
 install_runc() {
@@ -222,29 +227,28 @@ install_baseline_packages() {
 
 install_kube_tools() {
   if command -v kubeadm >/dev/null && kubeadm version -o short 2>/dev/null | grep -q "${K8S_PKG_VERSION%-*}"; then
-    log "kubeadm ${K8S_PKG_VERSION} already installed; skipping."
-    return
-  fi
-  log "Installing kubeadm/kubelet/kubectl ${K8S_PKG_VERSION}…"
-
-  if [[ "$OS_FAMILY" == "debian" ]]; then
-    mkdir -p /etc/apt/keyrings
-    curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/Release.key" \
-         | gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/ /" \
-         > /etc/apt/sources.list.d/kubernetes.list
-
-    apt-get update -y
-    apt-get install -y --allow-downgrades --allow-change-held-packages \
-          "kubelet=${K8S_PKG_VERSION}" \
-          "kubeadm=${K8S_PKG_VERSION}" \
-          "kubectl=${K8S_PKG_VERSION}"
-    apt-mark hold kubelet kubeadm kubectl
+    log "kubeadm ${K8S_PKG_VERSION} already installed; skipping download."
   else
-    # RPM repo. Note the rpm package versions use a "-150500.1.1" style suffix;
-    # convert "1.34.8-1.1" -> "1.34.8" for the rpm name.
-    local rpm_ver="${K8S_PKG_VERSION%-*}"
-    cat >/etc/yum.repos.d/kubernetes.repo <<EOF
+    log "Installing kubeadm/kubelet/kubectl ${K8S_PKG_VERSION}…"
+
+    if [[ "$OS_FAMILY" == "debian" ]]; then
+      mkdir -p /etc/apt/keyrings
+      curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/Release.key" \
+           | gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/ /" \
+           > /etc/apt/sources.list.d/kubernetes.list
+
+      apt-get update -y
+      apt-get install -y --allow-downgrades --allow-change-held-packages \
+            "kubelet=${K8S_PKG_VERSION}" \
+            "kubeadm=${K8S_PKG_VERSION}" \
+            "kubectl=${K8S_PKG_VERSION}"
+      apt-mark hold kubelet kubeadm kubectl
+    else
+      # RPM repo. Note the rpm package versions use a "-150500.1.1" style suffix;
+      # convert "1.34.8-1.1" -> "1.34.8" for the rpm name.
+      local rpm_ver="${K8S_PKG_VERSION%-*}"
+      cat >/etc/yum.repos.d/kubernetes.repo <<EOF
 [kubernetes]
 name=Kubernetes
 baseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/rpm/
@@ -253,21 +257,25 @@ gpgcheck=1
 gpgkey=https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/rpm/repodata/repomd.xml.key
 exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
 EOF
-    local pm
-    pm="$(command -v dnf || command -v yum)"
-    # SELinux must be permissive for kubelet (kubeadm docs).
-    if command -v setenforce >/dev/null 2>&1; then
-      setenforce 0 || true
-      [[ -f /etc/selinux/config ]] && \
-        sed -i 's/^SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config
-    fi
-    "$pm" install -y --disableexcludes=kubernetes \
-          "kubelet-${rpm_ver}" "kubeadm-${rpm_ver}" "kubectl-${rpm_ver}"
-    # Pin packages so a regular `dnf update` doesn't bump them unexpectedly.
-    if command -v dnf >/dev/null && dnf versionlock --help >/dev/null 2>&1; then
-      dnf versionlock add kubelet kubeadm kubectl >/dev/null 2>&1 || true
+      local pm
+      pm="$(command -v dnf || command -v yum)"
+      # SELinux must be permissive for kubelet (kubeadm docs).
+      if command -v setenforce >/dev/null 2>&1; then
+        setenforce 0 || true
+        [[ -f /etc/selinux/config ]] && \
+          sed -i 's/^SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config
+      fi
+      "$pm" install -y --disableexcludes=kubernetes \
+            "kubelet-${rpm_ver}" "kubeadm-${rpm_ver}" "kubectl-${rpm_ver}"
+      # Pin packages so a regular `dnf update` doesn't bump them unexpectedly.
+      if command -v dnf >/dev/null && dnf versionlock --help >/dev/null 2>&1; then
+        dnf versionlock add kubelet kubeadm kubectl >/dev/null 2>&1 || true
+      fi
     fi
   fi
+
+  # ALWAYS ensure kubelet is enabled on boot (idempotent). Same reasoning as
+  # containerd: a node that reboots with kubelet disabled never rejoins.
   systemctl enable --now kubelet
 }
 
@@ -571,101 +579,3 @@ main() {
 }
 
 main "$@"
-
-# Here's the mental model — what the script actually does, in order, when you run `sudo ./k8s-install.sh init` on a control plane node. The `join` flow is the same up to step 11.
-
-# ## The prep phase (steps 1–11)
-
-# These run on **every** node (master and workers), because every node needs to be able to run pods.
-
-# 1. **Disable swap** — Linux page-swapping to disk breaks kubelet's memory accounting, so we turn it off and comment it out in `/etc/fstab` so it stays off across reboots.
-
-# 2. **Load kernel modules** — `overlay` (the storage driver containerd uses to stack image layers efficiently) and `br_netfilter` (lets iptables see traffic crossing Linux network bridges, which is how pods talk to each other on a node).
-
-# 3. **Set sysctl params** — three networking knobs: forward IPv4 packets (otherwise pods on different nodes can't reach each other), and let iptables filter bridged traffic for both IPv4 and IPv6.
-
-# 4. **Install baseline OS packages** — small utilities Kubernetes needs at runtime: `socat` (port forwarding for `kubectl port-forward`), `conntrack` (connection tracking for kube-proxy's iptables rules), `ethtool`, `iproute`, `iptables`, `tar`, `gzip`.
-
-# 5. **Install containerd** — the **container runtime**. This is what actually starts and stops containers on the node. It pulls images, manages container lifecycles, sets up cgroups. kubelet talks to it via the CRI (Container Runtime Interface).
-
-# 6. **Install runc** — the **low-level runtime** containerd uses underneath. runc is what actually invokes the Linux kernel syscalls (`clone`, `unshare`, `pivot_root`) that create the namespaces and cgroups for a running container. containerd is the manager; runc is the worker.
-
-# 7. **Install CNI plugins** — binaries dropped into `/opt/cni/bin/`. CNI = Container Network Interface. These are small standardised programs (`bridge`, `host-local`, `loopback`, `portmap`, etc.) that kubelet invokes whenever a pod is created or destroyed, to set up its network interfaces. Calico will use some of these later.
-
-# 8. **Install kubeadm / kubelet / kubectl** — the three Kubernetes binaries:
-#    - **kubelet** = the agent that runs on every node; it talks to the API server, receives pod specs, and tells containerd what to run.
-#    - **kubeadm** = the bootstrapper that initializes/joins clusters (you run it once per node).
-#    - **kubectl** = the human/admin CLI (technically only needed on the master, but installed everywhere for convenience).
-
-# 9. **Install crictl** — debugging CLI for talking to containerd via the CRI. Lets you do things like `crictl ps` (containers running on this node), `crictl logs`, `crictl pull`. Not used at runtime, but invaluable when something breaks.
-
-# 10. **Configure crictl** — write `/etc/crictl.yaml` pointing it at containerd's Unix socket, then run a sanity check (`crictl info`) to confirm the link works. Surfaces problems here instead of at `kubeadm init`'s preflight step.
-
-# 11. **kubelet enabled to start at boot** — but doesn't actually start fully yet; it'll keep crashing in a loop until step 12 gives it something to do. (This is normal and expected.)
-
-# ## The init phase (steps 12–17) — control plane only
-
-# These run **only on the master** when you use `init`.
-
-# 12. **Auto-detect the API server IP** — script grabs the node's primary IPv4 address (the one used to reach the internet), so you don't have to hardcode it.
-
-# 13. **`kubeadm init`** — the big one. kubeadm pulls 5 control-plane container images (kube-apiserver, kube-controller-manager, kube-scheduler, etcd, pause), generates a full PKI tree of certificates (CA, API server cert, etcd certs, service account signing key…), writes static pod manifests to `/etc/kubernetes/manifests/`, then kubelet sees them and starts the control plane components. Also creates the `kube-system` namespace, sets up RBAC, generates a bootstrap token for workers, and deploys CoreDNS + kube-proxy.
-
-# 14. **Set up your kubeconfig** — copies `/etc/kubernetes/admin.conf` to `~/.kube/config` for your sudo user so you can run `kubectl` without being root.
-
-# 15. **Install the Tigera operator** — applies the Calico operator manifest (`tigera-operator.yaml`). This deploys *one* Deployment in the `tigera-operator` namespace, whose job is to manage Calico. It doesn't install Calico itself yet — it just sits there waiting for instructions.
-
-# 16. **Wait for Calico CRDs to be registered** — once the operator pod is running, it publishes Calico's custom resource definitions (`Installation`, `APIServer`, `Goldmane`, `Whisker`) to the API server. The script polls until `installations.operator.tigera.io` exists, because applying the next step before that would race.
-
-# 17. **Apply Calico's custom resources** — creates an `Installation` resource with your pod CIDR (192.168.0.0/16). The operator sees it and creates the `calico-system` namespace, then deploys: `calico-node` (a DaemonSet — one pod per node, responsible for pod networking and BGP/VXLAN), `calico-kube-controllers` (housekeeping), `calico-typha` (a caching layer for scale), and a few extras. When `calico-node` lands on the master, the master flips from `NotReady` → `Ready`.
-
-# 18. **Print the join command** — generates a fresh token via `kubeadm token create --print-join-command` and prints it. Save this — workers need it.
-
-# ## The join phase (steps 19–22) — workers only
-
-# When you run `join` on a worker, steps 1–11 happen again (each worker needs the runtime stack), then:
-
-# 19. **`kubeadm join`** — connects to the API server using the token from step 18, requests a kubelet certificate (signed by the cluster CA), and writes `/etc/kubernetes/kubelet.conf` so kubelet knows who it is and how to reach the API.
-
-# 20. **kubelet starts reporting** — registers the node with the API server. The scheduler now sees a new node.
-
-# 21. **Calico spawns automatically** — the `calico-node` DaemonSet sees the new node, schedules a `calico-node` pod on it. That pod sets up pod networking on the worker (interfaces, routes, VXLAN tunnels). Node flips to `Ready`.
-
-# 22. **Self-label as `worker`** — uses the kubelet's own credentials to add the `node-role.kubernetes.io/worker=` label, so `kubectl get nodes` shows ROLES=worker instead of `<none>`.
-
-# ## The vertical stack on a finished node
-
-# This is the picture you should carry in your head:
-
-# ```
-#                   ┌─────────────────────────────────────┐
-#                   │  Kubernetes API (on the master)     │
-#                   └────────────────▲────────────────────┘
-#                                    │  HTTPS (port 6443)
-#                                    │
-#    ┌───────────────────────────────┴──────────────────────────────┐
-#    │                       kubelet (systemd)                       │
-#    │   - watches API for pods assigned to this node                │
-#    │   - tells containerd to start/stop them                       │
-#    │   - invokes CNI plugins to wire up pod networking             │
-#    └─────┬─────────────────────────────────────┬───────────────────┘
-#          │ CRI (Unix socket)                   │ exec
-#          ▼                                     ▼
-#    ┌─────────────┐                       ┌───────────────┐
-#    │ containerd  │ ──────── exec ──────▶ │     runc      │
-#    │ (manager)   │                       │ (spawns the   │
-#    └──────┬──────┘                       │  container)   │
-#           │                              └───────────────┘
-#           ▼
-#     pulls images, manages cgroups, mounts overlay filesystems
-
-#    ┌─────────────────────────────────────────────────────────┐
-#    │   /opt/cni/bin/  ←  CNI plugins, invoked per pod        │
-#    │   Calico's calico-node DaemonSet uses these to wire     │
-#    │   pod IPs, routes, and VXLAN tunnels between nodes.     │
-#    └─────────────────────────────────────────────────────────┘
-# ```
-
-# That's the whole thing. Every component above has a clear job and they talk through well-defined interfaces (CRI, CNI, the Kubernetes API). Once you internalize this layered picture, you can read any K8s error message and immediately know *which layer* is failing — which is the actual point of the whole exercise.
-
-# Congrats on the cluster! 🎉
