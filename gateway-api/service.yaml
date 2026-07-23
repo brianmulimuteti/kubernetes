@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    meta.helm.sh/release-name: ngf
+    meta.helm.sh/release-namespace: nginx-gateway
+  creationTimestamp: "2026-07-17T06:45:50Z"
+  labels:
+    app.kubernetes.io/instance: ngf
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-gateway-fabric
+    app.kubernetes.io/version: 2.6.7
+    helm.sh/chart: nginx-gateway-fabric-2.6.7
+  name: ngf-nginx-gateway-fabric
+  namespace: nginx-gateway
+  resourceVersion: "1495245"
+  uid: 5ba6cdf2-8c50-47cb-b7f7-88e5ccf2b085
+spec:
+  clusterIP: 10.111.18.206
+  clusterIPs:
+  - 10.111.18.206
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: agent-grpc
+    port: 443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/instance: ngf
+    app.kubernetes.io/name: nginx-gateway-fabric
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
