@@ -73,7 +73,7 @@ We will install OLM in your cluster. This will create a new namespace `olm` and 
 
 ```bash
 # Install OLM
-curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.32.0/install.sh | bash -s v0.32.0
+curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.46.0/install.sh | bash -s v0.46.0
 
 # Install the operator
 kubectl create -f https://operatorhub.io/install/cert-manager.yaml
