@@ -1,0 +1,14 @@
+# we will create a pod that exceeds the resource quota limits defined in the "quota-policy" namespace. This pod will request more memory than allowed, which should trigger the admission controller to reject the pod creation.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: big-pod
+  namespace: quota-policy
+spec:
+  containers:
+  - name: big-pod-container
+    image: nginx
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi # this exceeds our quota limit of 1Gi

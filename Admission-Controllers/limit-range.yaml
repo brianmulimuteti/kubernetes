@@ -1,0 +1,16 @@
+# this is an example of mutating webhook admission controller that will automatically set default resource requests and limits for pods created in a namespace called "limit-range".
+# this will be applied to any pod that does not have limits by defualt, and will ensure that pods do not exceed the defined resource limits for the namespace.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: mem-limit-range
+  namespace: limit-range
+spec:
+  limits:
+    - default:
+        memory: 512Mi
+        cpu: 200m
+      defaultRequest:
+        memory: 256Mi
+        cpu: 100m
+      type: Container

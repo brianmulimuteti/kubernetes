@@ -1,0 +1,19 @@
+# in this example, we will create a resource quota policy that limits the number of pods, CPU and memory requests and limits for a namespace called "quota-policy".
+# This is an example of a validating webhook admission controller that will reject any pod creation that exceeds the defined resource quota limits.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quota-policy
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-quota
+  namespace: quota-policy
+spec:
+  hard:
+    pods: "4"
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.cpu: "2"
+    limits.memory: 2Gi
