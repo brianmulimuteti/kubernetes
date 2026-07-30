@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-pvc
+
+spec:
+  accessModes:
+  - ReadWriteOnce
+
+  storageClassName: aws-ebs
+
+  resources:
+    requests:
+      storage: 2Gi
+
+# initially, the PVC will be in a pending state until the EBS CSI driver provisions a new EBS volume and binds it to the PVC. Once the volume is provisioned and bound, the PVC will transition to a "Bound" state, indicating that it is ready for use by a pod.
